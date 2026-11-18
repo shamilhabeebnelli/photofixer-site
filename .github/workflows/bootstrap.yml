@@ -2,8 +2,8 @@ name: Bootstrap repository content
 on:
   push:
     paths:
-      - 'repo-content.zip'
-      - '*-repo-content.zip'
+      - 'repo-content.b64'
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -13,8 +13,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Unpack repository content
         run: |
-          unzip -o ./*repo-content.zip -d .
-          rm -f ./*repo-content.zip .github/workflows/bootstrap.yml
+          base64 -d repo-content.b64 > repo-content.zip
+          unzip -o repo-content.zip -d .
+          rm -f repo-content.b64 repo-content.zip .github/workflows/bootstrap.yml
       - name: Commit and push
         run: |
           git config user.name "photofixer-deploy"
