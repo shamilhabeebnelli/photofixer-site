@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- No third-party dependencies. Pixel decoding/encoding is done by the
+       browser's own maintained codecs (createImageBitmap / canvas), driven
+       through the ICodecSession interface. All decision logic lives here in C#. -->
+
+</Project>

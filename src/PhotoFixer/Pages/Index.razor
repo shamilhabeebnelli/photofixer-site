@@ -1,0 +1,195 @@
+@page "/"
+@inject IJSRuntime JS
+
+<PageTitle>PhotoFixer - resize photos for any form</PageTitle>
+
+<header class="hero">
+    <img src="logo.svg" alt="PhotoFixer logo" width="76" height="76" />
+    <h1>PhotoFixer</h1>
+    <p>Resize, crop and compress a photo to the exact pixels and KB a form asks for.</p>
+    <span class="privacy-pill">Runs fully in your browser &middot; your photo is never uploaded</span>
+</header>
+
+<main class="wrap">
+
+    <section class="card">
+        <h2><span class="step-dot">1</span> Choose a photo</h2>
+        <div class="file-zone">
+            <InputFile OnChange="OnFileChange" accept=".jpg,.jpeg,.png,image/jpeg,image/png" />
+            <div><strong>JPG or PNG</strong>, up to 30 MB</div>
+        </div>
+        @if (sourceInfo is { } s)
+        {
+            <div class="file-info">Loaded: @(s.Format.Contains("png") ? "PNG" : "JPEG"), @s.Width x @s.Height px, @Kb(s.Bytes)</div>
+        }
+    </section>
+
+    <section class="card">
+        <h2><span class="step-dot">2</span> Set what the form asks for</h2>
+        <div class="grid">
+            <label class="field">Width (px)
+                <InputNumber @bind-Value="width" placeholder="e.g. 600" />
+            </label>
+            <label class="field">Height (px)
+                <InputNumber @bind-Value="height" placeholder="e.g. 600" />
+            </label>
+            <label class="field">Max size (KB)
+                <InputNumber @bind-Value="maxKb" placeholder="e.g. 200" />
+            </label>
+        </div>
+
+        <div class="grid" style="margin-top:0.7rem; grid-template-columns:1fr;">
+            <label class="field">Output format
+                <InputSelect @bind-Value="format">
+                    <option value="@OutputFormat.KeepOriginal">Keep original format</option>
+                    <option value="@OutputFormat.Jpeg">JPEG (best for small KB limits)</option>
+                    <option value="@OutputFormat.Png">PNG (lossless, bigger files)</option>
+                </InputSelect>
+            </label>
+        </div>
+
+        <InputRadioGroup @bind-Value="mode" Name="mode">
+            <div class="modes">
+                <label class="@(mode == FitMode.FitInside ? "selected" : "")">
+                    <InputRadio Value="FitMode.FitInside" />
+                    <span><b>Fit inside</b> - keeps the whole photo, shrinks it to fit your limits.
+                        <small>Nothing is cut off. Final size may be smaller than the target.</small></span>
+                </label>
+                <label class="@(mode == FitMode.FillCrop ? "selected" : "")">
+                    <InputRadio Value="FitMode.FillCrop" />
+                    <span><b>Fill &amp; crop center</b> - exact width and height.
+                        <small>Cuts edges from the center crop when proportions differ.</small></span>
+                </label>
+                <label class="@(mode == FitMode.Stretch ? "selected" : "")">
+                    <InputRadio Value="FitMode.Stretch" />
+                    <span><b>Stretch to exact size</b> - ignores original proportions.
+                        <small>Exact size, but the photo can look squeezed.</small></span>
+                </label>
+            </div>
+        </InputRadioGroup>
+
+        <button class="go" @onclick="ProcessAsync" disabled="@(fileBytes is null || busy)">
+            @(busy ? "Working..." : "Fix my photo")
+        </button>
+        @if (error is { } err)
+        {
+            <div class="msg err">@err</div>
+        }
+    </section>
+
+    @if (result is { Success: true } r)
+    {
+        <section class="card result">
+            <h2><span class="step-dot">3</span> Check and download</h2>
+            <img id="result-preview" alt="Processed photo preview" />
+            <div class="stats">
+                <span class="stat">@r.OutputWidth x @r.OutputHeight px</span>
+                <span class="stat">@r.OutputKb KB</span>
+                @if (r.JpegQuality is { } q) { <span class="stat">JPEG quality @q</span> }
+                <span class="stat">@(r.FileExtension == ".png" ? "PNG" : "JPEG")</span>
+            </div>
+            @foreach (var w in r.Warnings) { <div class="msg warn">@w</div> }
+            @foreach (var n in r.Notes) { <div class="msg note">@n</div> }
+            <button class="dl" @onclick="DownloadAsync">Download result</button>
+        </section>
+    }
+
+    <footer>
+        <b>Honest notes:</b> every form applies its own checks, so a file that meets the numbers
+        can still be rejected by the destination site. Very small KB targets always cost quality.
+        PhotoFixer runs on your device with WebAssembly; no account, no upload, no copy kept.
+        <br /><b>&copy; 2026 Nelli. All rights reserved.</b> Unauthorized copying or redistribution is prohibited.
+    </footer>
+</main>
+
+@code {
+    private const long MaxFileBytes = 30L * 1024 * 1024;
+
+    private byte[]? fileBytes;
+    private SourceImage? sourceInfo;
+    private int? width;
+    private int? height;
+    private int? maxKb;
+    private FitMode mode = FitMode.FitInside;
+    private OutputFormat format = OutputFormat.KeepOriginal;
+    private ProcessResult? result;
+    private string? error;
+    private bool busy;
+    private bool previewPending;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The preview <img> only exists after the result card renders, so the
+        // blob URL must be set here, not in the click handler.
+        if (previewPending && result?.OutputBytes is not null)
+        {
+            previewPending = false;
+            await JS.InvokeVoidAsync("photoFixer.setPreviewFromLast");
+        }
+    }
+
+    private static string Kb(long bytes) => $"{Math.Round(bytes / 1024.0, 1)} KB";
+
+    private sealed class ProbeDto { public int width { get; set; } public int height { get; set; } public string type { get; set; } = ""; }
+
+    private async Task OnFileChange(InputFileChangeEventArgs e)
+    {
+        result = null; error = null; sourceInfo = null; fileBytes = null;
+        var file = e.File;
+        if (file.Size > MaxFileBytes)
+        {
+            error = "That photo is over 30 MB, which is too large for this tool.";
+            return;
+        }
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxFileBytes);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var bytes = ms.ToArray();
+            var p = await JS.InvokeAsync<ProbeDto>("photoFixer.probe", bytes, file.ContentType);
+            if (p.type is not ("image/jpeg" or "image/png"))
+            {
+                error = "Only JPG or PNG photos are supported.";
+                return;
+            }
+            fileBytes = bytes;
+            sourceInfo = new SourceImage(p.width, p.height, p.type, bytes.LongLength);
+            await JS.InvokeVoidAsync("photoFixer.setSource", bytes, file.ContentType);
+        }
+        catch
+        {
+            error = "That file is not a readable JPG or PNG image.";
+            fileBytes = null;
+            sourceInfo = null;
+        }
+    }
+
+    private async Task ProcessAsync()
+    {
+        if (fileBytes is null) return;
+        busy = true; result = null; error = null;
+        await Task.Yield();
+        try
+        {
+            var req = new ProcessRequest(width, height, maxKb, mode, format);
+            result = await PhotoFixerEngine.ProcessAsync(sourceInfo!, req, new Services.BrowserCodec(JS));
+            if (result.Success)
+                previewPending = true;
+            else
+                error = result.Error;
+        }
+        catch (Exception ex)
+        {
+            error = "Processing failed: " + ex.Message;
+        }
+        busy = false;
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (result?.OutputBytes is null) return;
+        var name = $"photofixer-{result.OutputWidth}x{result.OutputHeight}{result.FileExtension}";
+        await JS.InvokeVoidAsync("photoFixer.downloadLast", name);
+    }
+}
