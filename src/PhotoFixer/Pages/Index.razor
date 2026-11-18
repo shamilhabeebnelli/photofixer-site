@@ -15,12 +15,12 @@
     <section class="card">
         <h2><span class="step-dot">1</span> Choose a photo</h2>
         <div class="file-zone">
-            <InputFile OnChange="OnFileChange" accept=".jpg,.jpeg,.png,image/jpeg,image/png" />
+            <InputFile OnChange="OnFileChange" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/heic,image/heif" />
             <div><strong>JPG or PNG</strong>, up to 30 MB</div>
         </div>
         @if (sourceInfo is { } s)
         {
-            <div class="file-info">Loaded: @(s.Format.Contains("png") ? "PNG" : "JPEG"), @s.Width x @s.Height px, @Kb(s.Bytes)</div>
+            <div class="file-info">Loaded: @FormatName(s.Format), @s.Width x @s.Height px, @Kb(s.Bytes)</div>
         }
     </section>
 
@@ -124,11 +124,22 @@
         if (previewPending && result?.OutputBytes is not null)
         {
             previewPending = false;
-            await JS.InvokeVoidAsync("photoFixer.setPreviewFromLast");
+            await JS.InvokeVoidAsync("denelliPhotoFixer.setPreviewFromLast");
         }
     }
 
     private static string Kb(long bytes) => $"{Math.Round(bytes / 1024.0, 1)} KB";
+
+    private static string FormatName(string mime) => mime switch
+    {
+        "image/png" => "PNG",
+        "image/webp" => "WebP",
+        "image/gif" => "GIF",
+        "image/bmp" => "BMP",
+        "image/avif" => "AVIF",
+        "image/heic" => "HEIC",
+        _ => "JPEG"
+    };
 
     private sealed class ProbeDto { public int width { get; set; } public int height { get; set; } public string type { get; set; } = ""; }
 
@@ -147,19 +158,19 @@
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms);
             var bytes = ms.ToArray();
-            var p = await JS.InvokeAsync<ProbeDto>("photoFixer.probe", bytes, file.ContentType);
-            if (p.type is not ("image/jpeg" or "image/png"))
+            var p = await JS.InvokeAsync<ProbeDto>("denelliPhotoFixer.probe", bytes, file.ContentType);
+            if (p.type is not ("image/jpeg" or "image/png" or "image/webp" or "image/gif" or "image/bmp" or "image/avif" or "image/heic"))
             {
-                error = "Only JPG or PNG photos are supported.";
+                error = "That format is not supported. Use JPG, PNG, WebP, GIF, BMP, AVIF or HEIC.";
                 return;
             }
             fileBytes = bytes;
             sourceInfo = new SourceImage(p.width, p.height, p.type, bytes.LongLength);
-            await JS.InvokeVoidAsync("photoFixer.setSource", bytes, file.ContentType);
+            await JS.InvokeVoidAsync("denelliPhotoFixer.setSource", bytes, file.ContentType);
         }
         catch
         {
-            error = "That file is not a readable JPG or PNG image.";
+            error = "That file is not a readable photo. Supported: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC.";
             fileBytes = null;
             sourceInfo = null;
         }
@@ -190,6 +201,6 @@
     {
         if (result?.OutputBytes is null) return;
         var name = $"photofixer-{result.OutputWidth}x{result.OutputHeight}{result.FileExtension}";
-        await JS.InvokeVoidAsync("photoFixer.downloadLast", name);
+        await JS.InvokeVoidAsync("denelliPhotoFixer.downloadLast", name);
     }
 }

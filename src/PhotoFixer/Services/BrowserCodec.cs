@@ -7,14 +7,14 @@ namespace PhotoFixer.Services;
 public sealed class BrowserCodec(IJSRuntime js) : ICodecSession
 {
     public async Task RenderAsync(Geometry g) =>
-        await js.InvokeVoidAsync("photoFixer.render", g.CropX, g.CropY, g.CropW, g.CropH, g.OutW, g.OutH);
+        await js.InvokeVoidAsync("denelliPhotoFixer.render", g.CropX, g.CropY, g.CropW, g.CropH, g.OutW, g.OutH);
 
     public async Task<long> EncodeJpegAsync(int quality) =>
-        await js.InvokeAsync<long>("photoFixer.encodeJpeg", quality / 100.0);
+        await js.InvokeAsync<long>("denelliPhotoFixer.encodeJpeg", quality / 100.0);
 
     public async Task<long> EncodePngAsync() =>
-        await js.InvokeAsync<long>("photoFixer.encodePng");
+        await js.InvokeAsync<long>("denelliPhotoFixer.encodePng");
 
     public async Task<byte[]> LastBytesAsync() =>
-        await js.InvokeAsync<byte[]>("photoFixer.lastBytes");
+        await js.InvokeAsync<byte[]>("denelliPhotoFixer.lastBytes");
 }

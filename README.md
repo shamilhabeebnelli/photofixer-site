@@ -4,14 +4,16 @@ Copyright (c) 2026 Nelli. All rights reserved. This repository is public for
 transparency and hosting; it is not open source, and no license to copy or
 redistribute this code is granted.
 
-Resize, crop and compress a JPG/PNG photo to the exact pixel dimensions and
+Resize, crop and compress a photo to the exact pixel dimensions and
 KB limit an online form asks for. Runs entirely in the browser (C# / Blazor
 WebAssembly): the photo never leaves the device. No account, no server, no
 tracking, and camera/location metadata (EXIF) is stripped from the result.
 
 ## What it does
 
-- Upload JPG or PNG (up to 30 MB).
+- Upload JPG, PNG, WebP, GIF, BMP, AVIF or HEIC/HEIF (iPhone photos), up to 30 MB.
+  HEIC is decoded locally in the tab (see Third-party components); output is
+  JPEG or PNG.
 - Enter any of: target width (px), target height (px), max size (KB).
 - Three resize modes:
   - **Fit inside** - keeps the whole photo, shrinks proportionally.
@@ -32,13 +34,29 @@ tracking, and camera/location metadata (EXIF) is stripped from the result.
 ## Tech
 
 - .NET 10, Blazor WebAssembly (static site after publish).
-- No third-party packages at all. Pixel decoding/encoding uses the browser's
-  own maintained codecs (createImageBitmap + canvas) through a small JS
-  bridge; every decision - validation, crop geometry, the JPEG quality
-  binary search, when shrinking is allowed, when to fail - is C#
-  (src/PhotoFixer.Core). No dependency means no license or
-  vulnerability-advisory surface.
+- No third-party .NET packages at all. Pixel decoding/encoding uses the
+  browser's own maintained codecs (createImageBitmap + canvas) through a
+  small JS bridge; every decision - validation, crop geometry, the JPEG
+  quality binary search, when shrinking is allowed, when to fail - is C#
+  (src/PhotoFixer.Core).
 - Canvas re-encoding also strips EXIF metadata automatically.
+
+## Third-party components
+
+- **libheif-js 1.23.5** (an Emscripten build of
+  [libheif](https://github.com/strukturag/libheif), by strukturag AG and
+  contributors; JS wrapper by catdad-experiments), licensed under the
+  **GNU Lesser General Public License v3.0**. Used only to decode HEIC/HEIF
+  photos in browsers without native HEIC support (e.g. Chrome, Firefox);
+  it loads lazily from `wwwroot/vendor/` on first HEIC upload and runs
+  entirely on the device. License texts ship with the app
+  (`wwwroot/vendor/LIBHEIF-LICENSE.txt`,
+  `wwwroot/vendor/LIBHEIF-JS-LICENSE.txt`). Source:
+  https://github.com/catdad-experiments/libheif-js and
+  https://github.com/strukturag/libheif. As an LGPL component kept as a
+  separate replaceable module, it may be replaced by any compatible build;
+  the LGPL applies to that module only, not to PhotoFixer's own code, which
+  remains all-rights-reserved as stated above.
 
 ## Run locally
 
