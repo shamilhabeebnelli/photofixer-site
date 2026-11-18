@@ -17,7 +17,7 @@ public static class PhotoFixerEngine
 
     public static string? Validate(SourceImage? src, ProcessRequest req)
     {
-        if (src is null) return "Choose a JPG or PNG photo first.";
+        if (src is null) return "Choose a photo first (JPG, PNG, WebP, GIF, BMP, AVIF or HEIC).";
         if (req.TargetWidth is null && req.TargetHeight is null && req.MaxKb is null)
             return "Enter at least one target: a width, a height, or a max KB.";
         if (req.TargetWidth is < MinDimension or > MaxDimension || req.TargetHeight is < MinDimension or > MaxDimension)
