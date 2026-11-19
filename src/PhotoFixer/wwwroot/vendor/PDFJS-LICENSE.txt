@@ -1,0 +1,4 @@
+pdf.js (Mozilla PDF viewer)
+Version: 3.11.174 (UMD build, pdf.min.js + pdf.worker.min.js)
+License: Apache License 2.0
+https://github.com/mozilla/pdf.js/blob/master/LICENSE
