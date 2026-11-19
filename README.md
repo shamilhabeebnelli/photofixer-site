@@ -14,6 +14,12 @@ tracking, and camera/location metadata (EXIF) is stripped from the result.
 - Upload JPG, PNG, WebP, GIF, BMP, AVIF or HEIC/HEIF (iPhone photos), up to 30 MB.
   HEIC is decoded locally in the tab (see Third-party components); output is
   JPEG or PNG.
+- Upload a PDF (up to 30 MB, up to 40 pages) with a max KB target. The pages
+  are re-rendered as images and rebuilt into a new PDF that fits under the
+  limit: the pages look the same, but the result's text cannot be selected or
+  searched, and links, forms and annotations do not carry over. A PDF already
+  under the limit is returned unchanged, text and all. Page rendering uses
+  pdf.js and the rebuild uses pdf-lib (see Third-party components).
 - Enter any of: target width (px), target height (px), max size (KB).
 - Three resize modes:
   - **Fit inside** - keeps the whole photo, shrinks proportionally.
@@ -57,6 +63,15 @@ tracking, and camera/location metadata (EXIF) is stripped from the result.
   separate replaceable module, it may be replaced by any compatible build;
   the LGPL applies to that module only, not to PhotoFixer's own code, which
   remains all-rights-reserved as stated above.
+- **pdf.js 3.11.174** ([Mozilla's PDF viewer](https://github.com/mozilla/pdf.js)),
+  licensed under the **Apache License 2.0**. Used only to rasterise PDF pages
+  locally in the tab when a PDF is uploaded; loads lazily from
+  `wwwroot/vendor/` (`pdf.min.js` + `pdf.worker.min.js`, notice in
+  `wwwroot/vendor/PDFJS-LICENSE.txt`).
+- **pdf-lib 1.17.1** ([Hopding/pdf-lib](https://github.com/Hopding/pdf-lib)),
+  licensed under the **MIT License**. Used only to rebuild the compressed PDF
+  from the rendered page images; loads lazily from `wwwroot/vendor/`
+  (`pdf-lib.min.js`, notice in `wwwroot/vendor/PDFLIB-LICENSE.txt`).
 
 ## Run locally
 
