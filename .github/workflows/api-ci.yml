@@ -30,6 +30,7 @@ jobs:
       - name: Container runtime smoke test
         run: |
           set -euo pipefail
+          trap 'echo "=== container logs ==="; docker logs api 2>&1 | tail -40 || true' ERR
           python3 - <<'PY'
           import struct, zlib
           def chunk(t, d):
