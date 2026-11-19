@@ -89,9 +89,9 @@ app.MapPost("/v1/process", async (HttpRequest http) =>
     {
         codec = SkiaCodecSession.Create(bytes, sniffed, file.Length, out src);
     }
-    catch (Exception ex)
+    catch (InvalidDataException ex)
     {
-        return Problem(422, ex is InvalidDataException ? ex.Message : "The server could not decode this image (corrupt file or unsupported variant).");
+        return Problem(422, ex.Message);
     }
 
     // Bounded concurrency: image work is CPU/RAM heavy, so only a few requests
