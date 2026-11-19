@@ -146,6 +146,84 @@ public static class PhotoFixerEngine
         return new ProcessResult(true, null, bytes, mime, ext, geo.OutW, geo.OutH, Round(size), quality, notes, warnings);
     }
 
+    /// <summary>
+    /// KB-only compression for PDFs. The caller's codec rasterises every page
+    /// and rebuilds the PDF; this method makes the same decisions as the photo
+    /// path: quality first, scale down second (always disclosed), a strict
+    /// ceiling with a final acceptance check, and honest failure. A PDF that
+    /// is already under the limit is returned unchanged - never inflated,
+    /// never rasterised, text stays selectable.
+    /// </summary>
+    public static async Task<ProcessResult> ProcessPdfAsync(SourceImage src, ProcessRequest req, ICodecSession codec)
+    {
+        var notes = new List<string>();
+        var warnings = new List<string>();
+
+        if (req.MaxKb is < MinKb or > MaxKb)
+            return ProcessResult.Fail($"Max size must be between {MinKb} KB and {MaxKb} KB.");
+        long limit = req.MaxKb.Value * 1000L;
+        var pages = Math.Max(1, src.Pages);
+
+        if (src.Bytes <= limit)
+        {
+            notes.Add($"This PDF is already under {req.MaxKb} KB, so the original file is kept unchanged - text stays selectable and searchable.");
+            var original = await codec.LastBytesAsync();
+            return new ProcessResult(true, null, original, "application/pdf", ".pdf", src.Width, src.Height, Round(src.Bytes), null, notes, warnings, pages);
+        }
+
+        notes.Add(pages == 1
+            ? "The page is re-rendered as an image and rebuilt into a new PDF: it looks the same, but text can no longer be selected or searched, and links, forms and annotations do not carry over."
+            : $"All {pages} pages are re-rendered as images and rebuilt into a new PDF: they look the same, but text can no longer be selected or searched, and links, forms and annotations do not carry over.");
+
+        var geo = new Geometry(0, 0, src.Width, src.Height, src.Width, src.Height);
+        await codec.RenderAsync(geo);
+
+        int? quality;
+        long size;
+        var solved = await SolveQualityAsync(codec, limit);
+        if (solved is null)
+        {
+            var shrunk = false;
+            for (var i = 0; i < 10 && solved is null; i++)
+            {
+                var nw = Math.Max(16, (int)(geo.OutW * 0.85));
+                var nh = Math.Max(16, (int)(geo.OutH * 0.85));
+                if (nw == geo.OutW && nh == geo.OutH) break;
+                geo = geo with { OutW = nw, OutH = nh };
+                await codec.RenderAsync(geo);
+                shrunk = true;
+                solved = await SolveQualityAsync(codec, limit);
+            }
+            if (solved is null)
+            {
+                var smallest = await codec.EncodeJpegAsync(MinQuality);
+                return ProcessResult.Fail(
+                    $"Cannot reach {req.MaxKb} KB for this {pages}-page PDF even after scaling page images down to {geo.OutW} x {geo.OutH} px (smallest practical size about {Round(smallest)} KB). Raise the max KB.");
+            }
+            quality = solved;
+            if (shrunk)
+                notes.Add($"Page resolution reduced to {geo.OutW} x {geo.OutH} px (proportions kept) because quality alone could not reach the {req.MaxKb} KB target. Scaled down, never cropped or stretched.");
+        }
+        else
+        {
+            quality = solved;
+        }
+        size = await codec.EncodeJpegAsync(quality.Value); // leave the chosen quality as "last"
+        if (size > limit)
+            // Final acceptance check: the KB limit is a strict ceiling, never an over-limit success.
+            return ProcessResult.Fail(
+                $"Cannot reliably reach {req.MaxKb} KB for this PDF (smallest verified result was {Round(size)} KB). Raise the max KB.");
+
+        if (quality is < 60 and >= 40)
+            warnings.Add($"Page-image quality {quality} is fairly low. Zoom in on the preview to check small text before using the result.");
+        else if (quality is < 40)
+            warnings.Add($"Page-image quality {quality} is very low. Expect visible blockiness in text. A bigger max KB would look better.");
+
+        var bytes = await codec.LastBytesAsync();
+        notes.Add($"Result: {pages} page(s), page images {geo.OutW} x {geo.OutH} px, {Round(size)} KB, PDF (page images at JPEG quality {quality}).");
+        return new ProcessResult(true, null, bytes, "application/pdf", ".pdf", geo.OutW, geo.OutH, Round(size), quality, notes, warnings, pages);
+    }
+
     /// <summary>Highest quality whose encoded size fits the limit; null when even the floor quality is too big.</summary>
     private static async Task<int?> SolveQualityAsync(ICodecSession codec, long limitBytes)
     {
