@@ -64,12 +64,15 @@ Check("G4 no dims identity", g4.OutW == 3000 && g4.OutH == 2000, g4.ToString());
     Check("E4 fail mentions KB", (r.Error ?? "").Contains("Raise the max KB"), r.Error ?? "");
 }
 
-// --- PNG honesty ---
+// --- PNG honesty: a KB limit is a strict ceiling, never an over-limit success ---
 {
     var codec = new FakeCodec(0.05);
     var r = await PhotoFixerEngine.ProcessAsync(src, new ProcessRequest(400, null, 50, FitMode.FitInside, OutputFormat.Png), codec);
-    Check("P1 png succeeds", r.Success && r.MimeType == "image/png", r.MimeType ?? "");
-    Check("P1 png over-limit warning", r.Warnings.Any(w => w.Contains("PNG")), string.Join(" | ", r.Warnings));
+    Check("P1 png over-limit fails", !r.Success, r.Error ?? "");
+    Check("P1 fail names PNG + JPEG route", (r.Error ?? "").Contains("PNG") && (r.Error ?? "").Contains("JPEG"), r.Error ?? "");
+
+    var ok = await PhotoFixerEngine.ProcessAsync(src, new ProcessRequest(400, null, 500, FitMode.FitInside, OutputFormat.Png), new FakeCodec(0.05));
+    Check("P2 png under limit succeeds", ok.Success && ok.MimeType == "image/png" && ok.OutputKb <= 500, $"{ok.OutputKb} KB");
 }
 
 // --- Validation ---
