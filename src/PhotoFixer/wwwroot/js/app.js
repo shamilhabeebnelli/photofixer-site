@@ -89,8 +89,8 @@ window.denelliPhotoFixer = {
 
     // Read the picked file straight from the input element: bytes never cross
     // .NET interop. Decodes once, keeps the bitmap, returns facts to Blazor.
-    loadFromInput: async function (inputId) {
-        var input = document.getElementById(inputId);
+    loadFromInput: async function () {
+        var input = document.querySelector("input[type=file]");
         if (!input || !input.files || !input.files.length) throw new Error("no file chosen");
         var bytes = new Uint8Array(await input.files[0].arrayBuffer());
         var d = await window.denelliPhotoFixer._shamilDecode(bytes);
