@@ -19,7 +19,7 @@ public static class PhotoFixerEngine
     {
         if (src is null) return "Choose a photo first (JPG, PNG, WebP, GIF, BMP, AVIF or HEIC).";
         if (req.TargetWidth is null && req.TargetHeight is null && req.MaxKb is null)
-            return "Enter at least one target: a width, a height, or a max KB.";
+            return "Enter a maximum size in KB first.";
         if (req.TargetWidth is < MinDimension or > MaxDimension || req.TargetHeight is < MinDimension or > MaxDimension)
             return $"Dimensions must be between {MinDimension} and {MaxDimension} pixels.";
         if (req.MaxKb is < MinKb or > MaxKb)
@@ -63,12 +63,17 @@ public static class PhotoFixerEngine
         string mime;
         string ext;
 
+        if (format == OutputFormat.Jpeg && !src.Format.Contains("jpeg", StringComparison.OrdinalIgnoreCase) && !src.Format.Contains("jpg", StringComparison.OrdinalIgnoreCase))
+            notes.Add($"Converted from {FormatName(src.Format)} to JPEG - JPEG is the format that can reliably honour a strict KB limit.");
+
         if (format == OutputFormat.Png)
         {
             size = await codec.EncodePngAsync();
             mime = "image/png"; ext = ".png";
             if (limitBytes is { } pl && size > pl)
-                warnings.Add($"PNG is lossless and cannot reliably reach {req.MaxKb} KB. The result is {Round(size)} KB. Switch the output format to JPEG to hit small size targets.");
+                // A KB limit is a strict ceiling: never present an over-limit file as a success.
+                return ProcessResult.Fail(
+                    $"PNG is lossless and cannot reach {req.MaxKb} KB here; this image comes out at {Round(size)} KB as PNG. Choose JPEG output, which can be compressed to the target.");
             else
                 notes.Add("PNG keeps full quality, but file sizes stay larger than JPEG.");
         }
@@ -110,7 +115,7 @@ public static class PhotoFixerEngine
                     }
                     quality = solved;
                     if (shrunk)
-                        notes.Add($"Scaled down to {geo.OutW} x {geo.OutH} px (your Fit inside numbers are maximums, not an exact size) to reach the {req.MaxKb} KB target.");
+                        notes.Add($"Resolution reduced to {geo.OutW} x {geo.OutH} px (proportions kept) because quality alone could not reach the {req.MaxKb} KB target. Scaled down, never cropped or stretched.");
                 }
                 else
                 {
@@ -153,4 +158,15 @@ public static class PhotoFixerEngine
     }
 
     private static double Round(long bytes) => Math.Round(bytes / 1024.0, 1);
+
+    private static string FormatName(string mime) => mime switch
+    {
+        "image/png" => "PNG",
+        "image/webp" => "WebP",
+        "image/gif" => "GIF",
+        "image/bmp" => "BMP",
+        "image/avif" => "AVIF",
+        "image/heic" => "HEIC",
+        _ => "JPEG"
+    };
 }
