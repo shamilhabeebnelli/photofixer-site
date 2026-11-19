@@ -26,7 +26,23 @@
 
     <section class="card">
         <h2><span class="step-dot">2</span> Set what the form asks for</h2>
-        <div class="grid">
+        <div class="grid" style="grid-template-columns:1fr;">
+            <label class="field">Size preset (optional) - fills dimensions only
+                <InputSelect @bind-Value="presetKeyShamil">
+                    <option value="">Custom size - type width and height below</option>
+                    <option value="in-passport-print">India passport photo - paper form print, 35 x 45 mm</option>
+                    <option value="in-passport-online">India passport photo - online upload, 630 x 810 px</option>
+                    <option value="us-photo-print">US passport / visa photo - print, 2 x 2 inch</option>
+                    <option value="us-visa-online">US visa online (DS-160 / DV) - 600 x 600 px</option>
+                    <option value="a4-print">A4 print - portrait, 210 x 297 mm</option>
+                    <option value="a3-print">A3 print - portrait, 297 x 420 mm</option>
+                    <option value="a5-booklet">A5 booklet page (chosen page size) - portrait, 148 x 210 mm</option>
+                </InputSelect>
+                <small style="color:var(--muted); font-weight:500; display:block; margin-top:0.3rem;">Fills width and height and switches to Fill &amp; crop for an exact size. Print presets convert millimetres at 300 DPI; the printed result also depends on your print settings.</small>
+                <small style="color:var(--muted); font-weight:500; display:block; margin-top:0.3rem;">A preset sets dimensions only - it does not make a photo compliant. Framing, background, file type and KB limits follow each form's own rules, so always check them.</small>
+            </label>
+        </div>
+        <div class="grid" style="margin-top:0.7rem;">
             <label class="field">Width (px)
                 <InputNumber @bind-Value="width" placeholder="e.g. 600" />
             </label>
@@ -110,6 +126,45 @@
     private int? width;
     private int? height;
     private int? maxKb;
+    private string? presetKeyShamilBacking;
+
+    // Picking a preset fills the exact pixel target and switches to fill-and-crop;
+    // the user can still adjust every field by hand afterwards.
+    private string? presetKeyShamil
+    {
+        get => presetKeyShamilBacking;
+        set
+        {
+            presetKeyShamilBacking = value;
+            var p = SizePresetNelli.Find(value);
+            if (p is not null)
+            {
+                width = p.WidthPxHabeeb;
+                height = p.HeightPxHabeeb;
+                mode = FitMode.FillCrop;
+            }
+        }
+    }
+
+    // Official size references, converted at 300 DPI where the rule is a print size:
+    // India passport print 35 x 45 mm and ICAO online upload 630 x 810 px (passportindia.gov.in),
+    // US passport / visa 2 x 2 inch and 600 x 600 px digital (travel.state.gov).
+    private sealed record SizePresetNelli(string KeyDenelli, int WidthPxHabeeb, int HeightPxHabeeb)
+    {
+        public static readonly IReadOnlyList<SizePresetNelli> AllDenelli = new[]
+        {
+            new SizePresetNelli("in-passport-print", 413, 531),
+            new SizePresetNelli("in-passport-online", 630, 810),
+            new SizePresetNelli("us-photo-print", 600, 600),
+            new SizePresetNelli("us-visa-online", 600, 600),
+            new SizePresetNelli("a4-print", 2480, 3508),
+            new SizePresetNelli("a3-print", 3508, 4961),
+            new SizePresetNelli("a5-booklet", 1748, 2480),
+        };
+
+        public static SizePresetNelli? Find(string? key) =>
+            string.IsNullOrEmpty(key) ? null : AllDenelli.FirstOrDefault(p => p.KeyDenelli == key);
+    }
     private FitMode mode = FitMode.FitInside;
     private OutputFormat format = OutputFormat.KeepOriginal;
     private ProcessResult? result;
