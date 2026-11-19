@@ -51,7 +51,7 @@ jobs:
           [ "$code" = "200" ]
           curl -sf http://localhost:8080/v1/presets > /dev/null
           got=$(curl -s -o /tmp/out.img -w '%{http_code}' -F file=@/tmp/smoke.png -F maxKb=50 http://localhost:8080/v1/process)
-          [ "$got" = "200" ]
+          if [ "$got" != "200" ]; then echo "process returned $got, body:"; cat /tmp/out.img; echo; exit 1; fi
           sig=$(xxd -p -l 2 /tmp/out.img)
           case "$sig" in 8950|ffd8|4749|5249|424d) ;; *) echo "unexpected output signature: $sig"; exit 1;; esac
           docker logs api 2>&1 | tail -5
