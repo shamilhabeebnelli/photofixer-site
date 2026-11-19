@@ -1,12 +1,12 @@
 @page "/"
 @inject IJSRuntime JS
 
-<PageTitle>PhotoFixer - resize photos for any form</PageTitle>
+<PageTitle>PhotoFixer - compress photos to any KB size</PageTitle>
 
 <header class="hero">
     <img src="logo.svg" alt="PhotoFixer logo" width="76" height="76" />
     <h1>PhotoFixer</h1>
-    <p>Resize, crop and compress a photo to the exact pixels and KB a form asks for.</p>
+    <p>Type the maximum KB a form allows. Your photo is compressed to fit under it - no crop, no stretch, proportions untouched.</p>
     <span class="privacy-pill">Runs fully in your browser &middot; your photo is never uploaded</span>
 </header>
 
@@ -25,67 +25,17 @@
     </section>
 
     <section class="card">
-        <h2><span class="step-dot">2</span> Set what the form asks for</h2>
+        <h2><span class="step-dot">2</span> Set the maximum size</h2>
         <div class="grid" style="grid-template-columns:1fr;">
-            <label class="field">Size preset (optional) - fills dimensions only
-                <InputSelect @bind-Value="presetKeyShamil">
-                    <option value="">Custom size - type width and height below</option>
-                    <option value="in-passport-print">India passport photo - paper form print, 35 x 45 mm</option>
-                    <option value="in-passport-online">India passport photo - online upload, 630 x 810 px</option>
-                    <option value="us-photo-print">US passport / visa photo - print, 2 x 2 inch</option>
-                    <option value="us-visa-online">US visa online (DS-160 / DV) - 600 x 600 px</option>
-                    <option value="a4-print">A4 print - portrait, 210 x 297 mm</option>
-                    <option value="a3-print">A3 print - portrait, 297 x 420 mm</option>
-                    <option value="a5-booklet">A5 booklet page (chosen page size) - portrait, 148 x 210 mm</option>
-                </InputSelect>
-                <small style="color:var(--muted); font-weight:500; display:block; margin-top:0.3rem;">Fills width and height and switches to Fill &amp; crop for an exact size. Print presets convert millimetres at 300 DPI; the printed result also depends on your print settings.</small>
-                <small style="color:var(--muted); font-weight:500; display:block; margin-top:0.3rem;">A preset sets dimensions only - it does not make a photo compliant. Framing, background, file type and KB limits follow each form's own rules, so always check them.</small>
-            </label>
-        </div>
-        <div class="grid" style="margin-top:0.7rem;">
-            <label class="field">Width (px)
-                <InputNumber @bind-Value="width" placeholder="e.g. 600" />
-            </label>
-            <label class="field">Height (px)
-                <InputNumber @bind-Value="height" placeholder="e.g. 600" />
-            </label>
             <label class="field">Max size (KB)
                 <InputNumber @bind-Value="maxKb" placeholder="e.g. 200" />
+                <small style="color:var(--muted); font-weight:500; display:block; margin-top:0.3rem;">Your photo keeps its proportions. Compression quality is lowered first; the resolution is reduced automatically only when quality alone cannot reach your target, and the tool always tells you when that happens.</small>
+                <small style="color:var(--muted); font-weight:500; display:block; margin-top:0.3rem;">The result always comes out under your KB limit - a strict maximum, never an above-target file. Photos are saved as JPEG to reach small targets, and very small targets cost visible quality.</small>
             </label>
         </div>
-
-        <div class="grid" style="margin-top:0.7rem; grid-template-columns:1fr;">
-            <label class="field">Output format
-                <InputSelect @bind-Value="format">
-                    <option value="@OutputFormat.KeepOriginal">Keep original format</option>
-                    <option value="@OutputFormat.Jpeg">JPEG (best for small KB limits)</option>
-                    <option value="@OutputFormat.Png">PNG (lossless, bigger files)</option>
-                </InputSelect>
-            </label>
-        </div>
-
-        <InputRadioGroup @bind-Value="mode" Name="mode">
-            <div class="modes">
-                <label class="@(mode == FitMode.FitInside ? "selected" : "")">
-                    <InputRadio Value="FitMode.FitInside" />
-                    <span><b>Fit inside</b> - keeps the whole photo, shrinks it to fit your limits.
-                        <small>Nothing is cut off. Final size may be smaller than the target.</small></span>
-                </label>
-                <label class="@(mode == FitMode.FillCrop ? "selected" : "")">
-                    <InputRadio Value="FitMode.FillCrop" />
-                    <span><b>Fill &amp; crop center</b> - exact width and height.
-                        <small>Cuts edges from the center crop when proportions differ.</small></span>
-                </label>
-                <label class="@(mode == FitMode.Stretch ? "selected" : "")">
-                    <InputRadio Value="FitMode.Stretch" />
-                    <span><b>Stretch to exact size</b> - ignores original proportions.
-                        <small>Exact size, but the photo can look squeezed.</small></span>
-                </label>
-            </div>
-        </InputRadioGroup>
 
         <button class="go" @onclick="ProcessAsync" disabled="@(fileBytes is null || busy)">
-            @(busy ? "Working..." : "Fix my photo")
+            @(busy ? "Working..." : "Compress photo")
         </button>
         @if (error is { } err)
         {
@@ -97,7 +47,7 @@
     {
         <section class="card result">
             <h2><span class="step-dot">3</span> Check and download</h2>
-            <img id="result-preview" alt="Processed photo preview" />
+            <img id="result-preview" alt="Compressed photo preview" />
             <div class="stats">
                 <span class="stat">@r.OutputWidth x @r.OutputHeight px</span>
                 <span class="stat">@r.OutputKb KB</span>
@@ -123,50 +73,7 @@
 
     private byte[]? fileBytes;
     private SourceImage? sourceInfo;
-    private int? width;
-    private int? height;
     private int? maxKb;
-    private string? presetKeyShamilBacking;
-
-    // Picking a preset fills the exact pixel target and switches to fill-and-crop;
-    // the user can still adjust every field by hand afterwards.
-    private string? presetKeyShamil
-    {
-        get => presetKeyShamilBacking;
-        set
-        {
-            presetKeyShamilBacking = value;
-            var p = SizePresetNelli.Find(value);
-            if (p is not null)
-            {
-                width = p.WidthPxHabeeb;
-                height = p.HeightPxHabeeb;
-                mode = FitMode.FillCrop;
-            }
-        }
-    }
-
-    // Official size references, converted at 300 DPI where the rule is a print size:
-    // India passport print 35 x 45 mm and ICAO online upload 630 x 810 px (passportindia.gov.in),
-    // US passport / visa 2 x 2 inch and 600 x 600 px digital (travel.state.gov).
-    private sealed record SizePresetNelli(string KeyDenelli, int WidthPxHabeeb, int HeightPxHabeeb)
-    {
-        public static readonly IReadOnlyList<SizePresetNelli> AllDenelli = new[]
-        {
-            new SizePresetNelli("in-passport-print", 413, 531),
-            new SizePresetNelli("in-passport-online", 630, 810),
-            new SizePresetNelli("us-photo-print", 600, 600),
-            new SizePresetNelli("us-visa-online", 600, 600),
-            new SizePresetNelli("a4-print", 2480, 3508),
-            new SizePresetNelli("a3-print", 3508, 4961),
-            new SizePresetNelli("a5-booklet", 1748, 2480),
-        };
-
-        public static SizePresetNelli? Find(string? key) =>
-            string.IsNullOrEmpty(key) ? null : AllDenelli.FirstOrDefault(p => p.KeyDenelli == key);
-    }
-    private FitMode mode = FitMode.FitInside;
-    private OutputFormat format = OutputFormat.KeepOriginal;
     private ProcessResult? result;
     private string? error;
     private bool busy;
@@ -238,7 +145,11 @@
         await Task.Yield();
         try
         {
-            var req = new ProcessRequest(width, height, maxKb, mode, format);
+            // KB-only compression: keep the source proportions (FitInside with no
+            // dimension bounds) and let the engine search quality, shrinking only
+            // as a last resort and always disclosing it. JPEG output: the only
+            // format that can reliably honour a strict KB ceiling.
+            var req = new ProcessRequest(null, null, maxKb, FitMode.FitInside, OutputFormat.Jpeg);
             result = await PhotoFixerEngine.ProcessAsync(sourceInfo!, req, new Services.BrowserCodecShamil(JS));
             if (result.Success)
                 previewPending = true;
