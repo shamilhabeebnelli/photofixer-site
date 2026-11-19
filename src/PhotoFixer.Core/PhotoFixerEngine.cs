@@ -55,7 +55,7 @@ public static class PhotoFixerEngine
             _ => src.Format.Contains("png", StringComparison.OrdinalIgnoreCase) ? OutputFormat.Png : OutputFormat.Jpeg
         };
 
-        long? limitBytes = req.MaxKb is { } kb ? kb * 1024L : null;
+        long? limitBytes = req.MaxKb is { } kb ? kb * 1000L : null;
         await codec.RenderAsync(geo);
 
         int? quality = null;
@@ -157,7 +157,7 @@ public static class PhotoFixerEngine
         return best;
     }
 
-    private static double Round(long bytes) => Math.Round(bytes / 1024.0, 1);
+    private static double Round(long bytes) => Math.Round(bytes / 1000.0, 1);
 
     private static string FormatName(string mime) => mime switch
     {
