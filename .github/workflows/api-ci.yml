@@ -1,0 +1,28 @@
+name: api-ci
+
+# Verifies the PhotoFixer API branches: build, engine test suite, and the
+# Dockerfile. CI for this repository's own software - no deployment, no
+# endpoint is created by this workflow.
+on:
+  push:
+    branches: [photofixer-api-selfhost, photofixer-api-hosted]
+  workflow_dispatch:
+
+jobs:
+  build-test-container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build API (Release)
+        run: dotnet build src/PhotoFixer.Api -c Release
+
+      - name: Run engine verify suite
+        run: dotnet run --project src/PhotoFixer.Verify -c Release
+
+      - name: Build container image (build verification only, never pushed)
+        run: docker build -f src/PhotoFixer.Api/Dockerfile -t photofixer-api-ci .
