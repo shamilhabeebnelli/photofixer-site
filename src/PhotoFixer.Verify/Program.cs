@@ -103,6 +103,52 @@ Check("G4 no dims identity", g4.OutW == 3000 && g4.OutH == 2000, g4.ToString());
         $"q={lq.JpegQuality} " + string.Join(" | ", lq.Warnings));
 }
 
+// --- PDF: already under the limit keeps the original file unchanged ---
+{
+    var pdfSrc = new SourceImage(893, 1263, "application/pdf", 450_000, 3);
+    var r = await PhotoFixerEngine.ProcessPdfAsync(pdfSrc, new ProcessRequest(null, null, 500, FitMode.FitInside, OutputFormat.Jpeg), new FakePdfCodec(0.5, 3));
+    Check("D1 under-limit keeps original", r.Success && r.OutputKb == 450 && r.JpegQuality is null, $"{r.OutputKb} KB q={r.JpegQuality}");
+    Check("D1 says text preserved", r.Notes.Any(n => n.Contains("selectable")), string.Join(" | ", r.Notes));
+}
+
+// --- PDF: quality-first at full page resolution, strict ceiling ---
+{
+    var pdfSrc = new SourceImage(893, 1263, "application/pdf", 6_500_000, 3);
+    var codec = new FakePdfCodec(0.05, 3);
+    var r = await PhotoFixerEngine.ProcessPdfAsync(pdfSrc, new ProcessRequest(null, null, 200, FitMode.FitInside, OutputFormat.Jpeg), codec);
+    Check("D2 success", r.Success, r.Error ?? "");
+    Check("D2 under limit", r.OutputKb <= 200, $"{r.OutputKb} KB");
+    Check("D2 full resolution kept", r.OutputWidth == 893, $"{r.OutputWidth}x{r.OutputHeight}");
+    Check("D2 image-only pages disclosed", r.Notes.Any(n => n.Contains("image")), string.Join(" | ", r.Notes));
+    Check("D2 pdf mime + pages", r.MimeType == "application/pdf" && r.FileExtension == ".pdf" && r.Pages == 3, $"{r.MimeType} {r.Pages}p");
+}
+
+// --- PDF: shrink with disclosure when quality alone cannot reach it ---
+{
+    var pdfSrc = new SourceImage(893, 1263, "application/pdf", 6_500_000, 3);
+    var codec = new FakePdfCodec(0.5, 3);
+    var r = await PhotoFixerEngine.ProcessPdfAsync(pdfSrc, new ProcessRequest(null, null, 100, FitMode.FitInside, OutputFormat.Jpeg), codec);
+    Check("D3 shrink succeeds", r.Success, r.Error ?? "");
+    Check("D3 shrank", r.OutputWidth < 893, $"{r.OutputWidth}x{r.OutputHeight}");
+    Check("D3 shrink disclosed", r.Notes.Any(n => n.Contains("resolution reduced")), string.Join(" | ", r.Notes));
+    Check("D3 under limit", r.OutputKb <= 100, $"{r.OutputKb} KB");
+}
+
+// --- PDF: impossible target fails honestly, never an over-limit success ---
+{
+    var pdfSrc = new SourceImage(893, 1263, "application/pdf", 6_500_000, 12);
+    var r = await PhotoFixerEngine.ProcessPdfAsync(pdfSrc, new ProcessRequest(null, null, 5, FitMode.FitInside, OutputFormat.Jpeg), new FakePdfCodec(0.5, 12));
+    Check("D4 impossible fails", !r.Success, r.Error ?? "");
+    Check("D4 names the way out", (r.Error ?? "").Contains("Raise the max KB"), r.Error ?? "");
+}
+
+// --- PDF: KB range validation ---
+{
+    var pdfSrc = new SourceImage(893, 1263, "application/pdf", 6_500_000, 1);
+    var bad = await PhotoFixerEngine.ProcessPdfAsync(pdfSrc, new ProcessRequest(null, null, 2, FitMode.FitInside, OutputFormat.Jpeg), new FakePdfCodec(0.05, 1));
+    Check("D5 kb range rejected", !bad.Success, bad.Error ?? "");
+}
+
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
 return failures;
 
@@ -121,4 +167,22 @@ sealed class FakeCodec(double bytesPerPixelAtQ95) : ICodecSession
 
     public Task<long> EncodePngAsync() => Task.FromResult((long)(Last.OutW * Last.OutH * 1.6));
     public Task<byte[]> LastBytesAsync() => Task.FromResult(new byte[] { 0xFF, 0xD8, 0xFF });
+}
+
+// Fake PDF codec: like FakeCodec but every page costs pixels, so size scales
+// with the page count - matching how the real rebuilt PDF grows.
+sealed class FakePdfCodec(double bytesPerPixelAtQ95, int pages) : ICodecSession
+{
+    public Geometry Last = new(0, 0, 893, 1263, 893, 1263);
+
+    public Task RenderAsync(Geometry g) { Last = g; return Task.CompletedTask; }
+
+    public Task<long> EncodeJpegAsync(int quality)
+    {
+        var factor = 0.2 + 0.8 * quality / 95.0;
+        return Task.FromResult((long)(pages * Last.OutW * Last.OutH * bytesPerPixelAtQ95 * factor));
+    }
+
+    public Task<long> EncodePngAsync() => throw new NotSupportedException();
+    public Task<byte[]> LastBytesAsync() => Task.FromResult(new byte[] { 0x25, 0x50, 0x44, 0x46 });
 }
