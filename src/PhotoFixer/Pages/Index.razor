@@ -15,7 +15,7 @@
     <section class="card">
         <h2><span class="step-dot">1</span> Choose a photo</h2>
         <div class="file-zone">
-            <InputFile id="denelliPhotoInput" OnChange="OnFileChange" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/heic,image/heif" />
+            <InputFile OnChange="OnFileChange" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/heic,image/heif" />
             <div><strong>JPG, PNG, WebP, GIF, BMP, AVIF or HEIC</strong>, up to 30 MB</div>
         </div>
         @if (sourceInfo is { } s)
@@ -117,7 +117,7 @@
         }
         try
         {
-            var p = await JS.InvokeAsync<ProbeDto>("denelliPhotoFixer.loadFromInput", "denelliPhotoInput");
+            var p = await JS.InvokeAsync<ProbeDto>("denelliPhotoFixer.loadFromInput");
             if (p.size > MaxFileBytes)
             {
                 error = "That photo is over 30 MB, which is too large for this tool.";
