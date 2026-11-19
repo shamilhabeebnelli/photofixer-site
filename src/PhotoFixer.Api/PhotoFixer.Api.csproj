@@ -12,7 +12,7 @@
          Chosen over ImageSharp (Six Labors Split License - paid for some
          commercial use) and Magick.NET (kept as the HEIC roadmap option). -->
     <PackageReference Include="SkiaSharp" Version="3.*" />
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.*" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.*" />
   </ItemGroup>
 
 </Project>
