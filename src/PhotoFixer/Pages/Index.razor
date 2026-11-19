@@ -89,7 +89,7 @@
         }
     }
 
-    private static string Kb(long bytes) => $"{Math.Round(bytes / 1024.0, 1)} KB";
+    private static string Kb(long bytes) => $"{Math.Round(bytes / 1000.0, 1)} KB";
 
     private static string FormatName(string mime) => mime switch
     {
