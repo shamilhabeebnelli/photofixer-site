@@ -1,26 +1,33 @@
 @page "/"
 @inject IJSRuntime JS
 
-<PageTitle>PhotoFixer - compress photos to any KB size</PageTitle>
+<PageTitle>PhotoFixer - compress photos and PDFs to any KB size</PageTitle>
 
 <header class="hero">
     <img src="logo.svg" alt="PhotoFixer logo" width="76" height="76" />
     <h1>PhotoFixer</h1>
-    <p>Type the maximum KB a form allows. Your photo is compressed to fit under it - no crop, no stretch, proportions untouched.</p>
-    <span class="privacy-pill">Runs fully in your browser &middot; your photo is never uploaded</span>
+    <p>Type the maximum KB a form allows. Your photo or PDF is compressed to fit under it - no crop, no stretch, proportions untouched.</p>
+    <span class="privacy-pill">Runs fully in your browser &middot; your file is never uploaded</span>
 </header>
 
 <main class="wrap">
 
     <section class="card">
-        <h2><span class="step-dot">1</span> Choose a photo</h2>
+        <h2><span class="step-dot">1</span> Choose a photo or PDF</h2>
         <div class="file-zone">
-            <InputFile OnChange="OnFileChange" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/heic,image/heif" />
-            <div><strong>JPG, PNG, WebP, GIF, BMP, AVIF or HEIC</strong>, up to 30 MB</div>
+            <InputFile OnChange="OnFileChange" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif,.pdf,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/heic,image/heif,application/pdf" />
+            <div><strong>JPG, PNG, WebP, GIF, BMP, AVIF, HEIC or PDF</strong>, up to 30 MB</div>
         </div>
         @if (sourceInfo is { } s)
         {
-            <div class="file-info">Loaded: @FormatName(s.Format), @s.Width x @s.Height px, @Kb(s.Bytes)</div>
+            if (s.Format == "application/pdf")
+            {
+                <div class="file-info">Loaded: PDF, @s.Pages @(s.Pages == 1 ? "page" : "pages"), @Kb(s.Bytes)</div>
+            }
+            else
+            {
+                <div class="file-info">Loaded: @FormatName(s.Format), @s.Width x @s.Height px, @Kb(s.Bytes)</div>
+            }
         }
     </section>
 
@@ -31,11 +38,12 @@
                 <InputNumber @bind-Value="maxKb" placeholder="e.g. 200" />
                 <small style="color:var(--muted); font-weight:500; display:block; margin-top:0.3rem;">Your photo keeps its proportions. Compression quality is lowered first; the resolution is reduced automatically only when quality alone cannot reach your target, and the tool always tells you when that happens.</small>
                 <small style="color:var(--muted); font-weight:500; display:block; margin-top:0.3rem;">The result always comes out under your KB limit - a strict maximum, never an above-target file. Photos are saved as JPEG to reach small targets, and very small targets cost visible quality.</small>
+                <small style="color:var(--muted); font-weight:500; display:block; margin-top:0.3rem;">PDFs are rebuilt with image-only pages: the pages look the same, but the result's text cannot be selected or searched. A PDF already under your limit is returned unchanged.</small>
             </label>
         </div>
 
         <button class="go" @onclick="ProcessAsync" disabled="@(sourceInfo is null || busy)">
-            @(busy ? "Working..." : "Compress photo")
+            @(busy ? "Working..." : "Compress")
         </button>
         @if (error is { } err)
         {
@@ -47,12 +55,22 @@
     {
         <section class="card result">
             <h2><span class="step-dot">3</span> Check and download</h2>
-            <img id="result-preview" alt="Compressed photo preview" />
+            <img id="result-preview" alt="Compressed result preview" />
             <div class="stats">
-                <span class="stat">@r.OutputWidth x @r.OutputHeight px</span>
-                <span class="stat">@r.OutputKb KB</span>
-                @if (r.JpegQuality is { } q) { <span class="stat">JPEG quality @q</span> }
-                <span class="stat">@(r.FileExtension == ".png" ? "PNG" : "JPEG")</span>
+                @if (r.FileExtension == ".pdf")
+                {
+                    <span class="stat">@r.Pages @(r.Pages == 1 ? "page" : "pages")</span>
+                    <span class="stat">@r.OutputKb KB</span>
+                    @if (r.JpegQuality is { } pq) { <span class="stat">page-image quality @pq</span> }
+                    <span class="stat">PDF</span>
+                }
+                else
+                {
+                    <span class="stat">@r.OutputWidth x @r.OutputHeight px</span>
+                    <span class="stat">@r.OutputKb KB</span>
+                    @if (r.JpegQuality is { } q) { <span class="stat">JPEG quality @q</span> }
+                    <span class="stat">@(r.FileExtension == ".png" ? "PNG" : "JPEG")</span>
+                }
             </div>
             @foreach (var w in r.Warnings) { <div class="msg warn">@w</div> }
             @foreach (var n in r.Notes) { <div class="msg note">@n</div> }
@@ -63,6 +81,8 @@
     <footer>
         <b>Honest notes:</b> every form applies its own checks, so a file that meets the numbers
         can still be rejected by the destination site. Very small KB targets always cost quality.
+        Compressed PDFs are rebuilt as image-only pages: they look the same, but their text cannot
+        be selected or searched, and links or form fields do not carry over.
         PhotoFixer runs on your device with WebAssembly; no account, no upload, no copy kept.
         <br /><b>&copy; 2026 Nelli. All rights reserved.</b> Unauthorized copying or redistribution is prohibited.
     </footer>
@@ -102,7 +122,7 @@
         _ => "JPEG"
     };
 
-    private sealed class ProbeDto { public int width { get; set; } public int height { get; set; } public string type { get; set; } = ""; public long size { get; set; } }
+    private sealed class ProbeDto { public int width { get; set; } public int height { get; set; } public string type { get; set; } = ""; public long size { get; set; } public int pages { get; set; } }
 
     // The file's bytes are read by JavaScript straight from the input element
     // (loadFromInput), never copied through .NET interop: fast and reliable.
@@ -112,7 +132,7 @@
         var file = e.File;
         if (file.Size > MaxFileBytes)
         {
-            error = "That photo is over 30 MB, which is too large for this tool.";
+            error = "That file is over 30 MB, which is too large for this tool.";
             return;
         }
         try
@@ -120,19 +140,23 @@
             var p = await JS.InvokeAsync<ProbeDto>("denelliPhotoFixer.loadFromInput");
             if (p.size > MaxFileBytes)
             {
-                error = "That photo is over 30 MB, which is too large for this tool.";
+                error = "That file is over 30 MB, which is too large for this tool.";
                 return;
             }
-            if (p.type is not ("image/jpeg" or "image/png" or "image/webp" or "image/gif" or "image/bmp" or "image/avif" or "image/heic"))
+            if (p.type is not ("image/jpeg" or "image/png" or "image/webp" or "image/gif" or "image/bmp" or "image/avif" or "image/heic" or "application/pdf"))
             {
-                error = "That format is not supported. Use JPG, PNG, WebP, GIF, BMP, AVIF or HEIC.";
+                error = "That format is not supported. Use JPG, PNG, WebP, GIF, BMP, AVIF, HEIC or PDF.";
                 return;
             }
-            sourceInfo = new SourceImage(p.width, p.height, p.type, p.size);
+            sourceInfo = new SourceImage(p.width, p.height, p.type, p.size, p.pages);
         }
-        catch
+        catch (Exception ex)
         {
-            error = "That file is not a readable photo. Supported: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC.";
+            // The JS loader throws a specific message for over-40-page PDFs;
+            // keep that honesty instead of the generic failure.
+            error = ex.Message.Contains("pages")
+                ? ex.Message
+                : "That file could not be read. Supported: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC, PDF.";
             sourceInfo = null;
         }
     }
@@ -149,7 +173,10 @@
             // as a last resort and always disclosing it. JPEG output: the only
             // format that can reliably honour a strict KB ceiling.
             var req = new ProcessRequest(null, null, maxKb, FitMode.FitInside, OutputFormat.Jpeg);
-            result = await PhotoFixerEngine.ProcessAsync(sourceInfo!, req, new Services.BrowserCodecShamil(JS));
+            if (sourceInfo!.Format == "application/pdf")
+                result = await PhotoFixerEngine.ProcessPdfAsync(sourceInfo!, req, new Services.BrowserCodecPdf(JS, sourceInfo!.Width));
+            else
+                result = await PhotoFixerEngine.ProcessAsync(sourceInfo!, req, new Services.BrowserCodecShamil(JS));
             if (result.Success)
                 previewPending = true;
             else
@@ -165,7 +192,9 @@
     private async Task DownloadAsync()
     {
         if (result?.OutputBytes is null) return;
-        var name = $"photofixer-{result.OutputWidth}x{result.OutputHeight}{result.FileExtension}";
+        var name = result.FileExtension == ".pdf"
+            ? $"photofixer-{result.Pages}pages-{result.OutputKb}KB.pdf"
+            : $"photofixer-{result.OutputWidth}x{result.OutputHeight}{result.FileExtension}";
         await JS.InvokeVoidAsync("denelliPhotoFixer.downloadLast", name);
     }
 }
