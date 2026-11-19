@@ -153,9 +153,12 @@
         catch (Exception ex)
         {
             // The JS loader throws a specific message for over-40-page PDFs;
-            // keep that honesty instead of the generic failure.
-            error = ex.Message.Contains("pages")
-                ? ex.Message
+            // keep that honesty instead of the generic failure. A JS interop
+            // exception appends the JS stack after a newline - show only the
+            // first line, never the stack.
+            var firstLine = ex.Message.Split('\n')[0].Trim();
+            error = firstLine.Contains("pages")
+                ? firstLine
                 : "That file could not be read. Supported: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC, PDF.";
             sourceInfo = null;
         }
