@@ -87,6 +87,18 @@ window.denelliPhotoFixer = {
         return { bitmap: bmp, type: type };
     },
 
+    // Read the picked file straight from the input element: bytes never cross
+    // .NET interop. Decodes once, keeps the bitmap, returns facts to Blazor.
+    loadFromInput: async function (inputId) {
+        var input = document.getElementById(inputId);
+        if (!input || !input.files || !input.files.length) throw new Error("no file chosen");
+        var bytes = new Uint8Array(await input.files[0].arrayBuffer());
+        var d = await window.denelliPhotoFixer._shamilDecode(bytes);
+        if (window.denelliPhotoFixer._nelliBitmap) window.denelliPhotoFixer._nelliBitmap.close();
+        window.denelliPhotoFixer._nelliBitmap = d.bitmap;
+        return { width: d.bitmap.width, height: d.bitmap.height, type: d.type, size: bytes.length };
+    },
+
     // Decode once to read dimensions/format. Returns {width, height, type}.
     probe: async function (bytes, contentType) {
         var d = await window.denelliPhotoFixer._shamilDecode(bytes);
