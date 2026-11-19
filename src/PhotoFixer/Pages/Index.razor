@@ -15,7 +15,7 @@
     <section class="card">
         <h2><span class="step-dot">1</span> Choose a photo</h2>
         <div class="file-zone">
-            <InputFile OnChange="OnFileChange" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/heic,image/heif" />
+            <InputFile id="denelliPhotoInput" OnChange="OnFileChange" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/heic,image/heif" />
             <div><strong>JPG, PNG, WebP, GIF, BMP, AVIF or HEIC</strong>, up to 30 MB</div>
         </div>
         @if (sourceInfo is { } s)
@@ -34,7 +34,7 @@
             </label>
         </div>
 
-        <button class="go" @onclick="ProcessAsync" disabled="@(fileBytes is null || busy)">
+        <button class="go" @onclick="ProcessAsync" disabled="@(sourceInfo is null || busy)">
             @(busy ? "Working..." : "Compress photo")
         </button>
         @if (error is { } err)
@@ -71,7 +71,6 @@
 @code {
     private const long MaxFileBytes = 30L * 1024 * 1024;
 
-    private byte[]? fileBytes;
     private SourceImage? sourceInfo;
     private int? maxKb;
     private ProcessResult? result;
@@ -103,11 +102,13 @@
         _ => "JPEG"
     };
 
-    private sealed class ProbeDto { public int width { get; set; } public int height { get; set; } public string type { get; set; } = ""; }
+    private sealed class ProbeDto { public int width { get; set; } public int height { get; set; } public string type { get; set; } = ""; public long size { get; set; } }
 
+    // The file's bytes are read by JavaScript straight from the input element
+    // (loadFromInput), never copied through .NET interop: fast and reliable.
     private async Task OnFileChange(InputFileChangeEventArgs e)
     {
-        result = null; error = null; sourceInfo = null; fileBytes = null;
+        result = null; error = null; sourceInfo = null;
         var file = e.File;
         if (file.Size > MaxFileBytes)
         {
@@ -116,31 +117,29 @@
         }
         try
         {
-            await using var stream = file.OpenReadStream(MaxFileBytes);
-            using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms);
-            var bytes = ms.ToArray();
-            var p = await JS.InvokeAsync<ProbeDto>("denelliPhotoFixer.probe", bytes, file.ContentType);
+            var p = await JS.InvokeAsync<ProbeDto>("denelliPhotoFixer.loadFromInput", "denelliPhotoInput");
+            if (p.size > MaxFileBytes)
+            {
+                error = "That photo is over 30 MB, which is too large for this tool.";
+                return;
+            }
             if (p.type is not ("image/jpeg" or "image/png" or "image/webp" or "image/gif" or "image/bmp" or "image/avif" or "image/heic"))
             {
                 error = "That format is not supported. Use JPG, PNG, WebP, GIF, BMP, AVIF or HEIC.";
                 return;
             }
-            fileBytes = bytes;
-            sourceInfo = new SourceImage(p.width, p.height, p.type, bytes.LongLength);
-            await JS.InvokeVoidAsync("denelliPhotoFixer.setSource", bytes, file.ContentType);
+            sourceInfo = new SourceImage(p.width, p.height, p.type, p.size);
         }
         catch
         {
             error = "That file is not a readable photo. Supported: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC.";
-            fileBytes = null;
             sourceInfo = null;
         }
     }
 
     private async Task ProcessAsync()
     {
-        if (fileBytes is null) return;
+        if (sourceInfo is null) return;
         busy = true; result = null; error = null;
         await Task.Yield();
         try
