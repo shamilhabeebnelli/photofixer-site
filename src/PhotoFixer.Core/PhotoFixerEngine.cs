@@ -122,6 +122,11 @@ public static class PhotoFixerEngine
                     quality = solved;
                 }
                 size = await codec.EncodeJpegAsync(quality.Value); // leave the chosen quality as "last"
+                if (size > jl)
+                    // Final acceptance check: never return an over-limit file as a success, even if an
+                    // encoder ever turns out non-deterministic. The KB limit is a strict ceiling.
+                    return ProcessResult.Fail(
+                        $"Cannot reliably reach {req.MaxKb} KB for this photo (smallest verified result was {Round(size)} KB). Raise the max KB.");
             }
             else
             {
