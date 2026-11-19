@@ -5,12 +5,12 @@
 // libheif-js (LGPL-3.0, see wwwroot/vendor/LIBHEIF-LICENSE.txt) that loads
 // lazily and only ever runs locally in this tab.
 window.denelliPhotoFixer = {
-    _bitmap: null,   // decoded source image (decoded once at upload)
-    _canvas: null,   // OffscreenCanvas holding the crop+resize result
-    _last: null,     // Blob of the most recent encode
-    _previewUrl: null,
-    _downloadUrl: null,
-    _libheifPromise: null,
+    _nelliBitmap: null,   // decoded source image (decoded once at upload)
+    _shamilCanvas: null,   // OffscreenCanvas holding the crop+resize result
+    _habeebLast: null,     // Blob of the most recent encode
+    _denelliPreviewUrl: null,
+    _nelliDownloadUrl: null,
+    _shamilLibheifPromise: null,
 
     // Identify the real format from magic bytes; never trusts the OS MIME hint.
     sniff: function (bytes) {
@@ -32,9 +32,9 @@ window.denelliPhotoFixer = {
 
     // Load the vendored HEIC decoder on first use only.
     // libheif-bundle.js exposes an Emscripten factory; calling it returns the module.
-    _ensureLibheif: function () {
-        if (!window.denelliPhotoFixer._libheifPromise) {
-            window.denelliPhotoFixer._libheifPromise = new Promise(function (resolve, reject) {
+    _nelliEnsureLibheif: function () {
+        if (!window.denelliPhotoFixer._shamilLibheifPromise) {
+            window.denelliPhotoFixer._shamilLibheifPromise = new Promise(function (resolve, reject) {
                 var s = document.createElement("script");
                 s.src = "vendor/libheif-bundle.js";
                 s.onload = function () {
@@ -45,12 +45,12 @@ window.denelliPhotoFixer = {
                 document.head.appendChild(s);
             });
         }
-        return window.denelliPhotoFixer._libheifPromise;
+        return window.denelliPhotoFixer._shamilLibheifPromise;
     },
 
     // HEIC -> ImageBitmap via libheif (RGBA pixels) -> OffscreenCanvas.
-    _decodeHeic: async function (bytes) {
-        var libheif = await window.denelliPhotoFixer._ensureLibheif();
+    _decodeHeicHabeeb: async function (bytes) {
+        var libheif = await window.denelliPhotoFixer._nelliEnsureLibheif();
         var decoder = new libheif.HeifDecoder();
         var images = decoder.decode(bytes);
         if (!images || !images.length) throw new Error("No image found in HEIC file");
@@ -70,7 +70,7 @@ window.denelliPhotoFixer = {
         return await createImageBitmap(canvas);
     },
 
-    _decode: async function (bytes) {
+    _shamilDecode: async function (bytes) {
         var type = window.denelliPhotoFixer.sniff(bytes);
         if (!type) throw new Error("unrecognized format");
         if (type === "image/heic") {
@@ -79,7 +79,7 @@ window.denelliPhotoFixer = {
                 var nativeBmp = await createImageBitmap(new Blob([bytes]));
                 return { bitmap: nativeBmp, type: type };
             } catch (e) {
-                var heicBmp = await window.denelliPhotoFixer._decodeHeic(bytes);
+                var heicBmp = await window.denelliPhotoFixer._decodeHeicHabeeb(bytes);
                 return { bitmap: heicBmp, type: type };
             }
         }
@@ -89,7 +89,7 @@ window.denelliPhotoFixer = {
 
     // Decode once to read dimensions/format. Returns {width, height, type}.
     probe: async function (bytes, contentType) {
-        var d = await window.denelliPhotoFixer._decode(bytes);
+        var d = await window.denelliPhotoFixer._shamilDecode(bytes);
         var res = { width: d.bitmap.width, height: d.bitmap.height, type: d.type };
         d.bitmap.close();
         return res;
@@ -97,14 +97,14 @@ window.denelliPhotoFixer = {
 
     // Keep the decoded source for repeated renders without re-uploading bytes.
     setSource: async function (bytes, contentType) {
-        if (window.denelliPhotoFixer._bitmap) window.denelliPhotoFixer._bitmap.close();
-        var d = await window.denelliPhotoFixer._decode(bytes);
-        window.denelliPhotoFixer._bitmap = d.bitmap;
+        if (window.denelliPhotoFixer._nelliBitmap) window.denelliPhotoFixer._nelliBitmap.close();
+        var d = await window.denelliPhotoFixer._shamilDecode(bytes);
+        window.denelliPhotoFixer._nelliBitmap = d.bitmap;
     },
 
     // Crop (cx,cy,cw,ch in source pixels) + resize to (ow,oh) onto the working canvas.
     render: function (cx, cy, cw, ch, ow, oh) {
-        var bmp = window.denelliPhotoFixer._bitmap;
+        var bmp = window.denelliPhotoFixer._nelliBitmap;
         var canvas = new OffscreenCanvas(ow, oh);
         var ctx = canvas.getContext("2d");
         ctx.fillStyle = "#FFFFFF"; // JPEG has no alpha; composite on white, never black
@@ -112,42 +112,42 @@ window.denelliPhotoFixer = {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(bmp, cx, cy, cw, ch, 0, 0, ow, oh);
-        window.denelliPhotoFixer._canvas = canvas;
+        window.denelliPhotoFixer._shamilCanvas = canvas;
     },
 
     // Encode the working canvas as JPEG; quality is 0.05-0.95. Returns byte size.
     encodeJpeg: async function (quality) {
-        var blob = await window.denelliPhotoFixer._canvas.convertToBlob({ type: "image/jpeg", quality: quality });
-        window.denelliPhotoFixer._last = blob;
+        var blob = await window.denelliPhotoFixer._shamilCanvas.convertToBlob({ type: "image/jpeg", quality: quality });
+        window.denelliPhotoFixer._habeebLast = blob;
         return blob.size;
     },
 
     // Encode the working canvas as PNG. Returns byte size.
     encodePng: async function () {
-        var blob = await window.denelliPhotoFixer._canvas.convertToBlob({ type: "image/png" });
-        window.denelliPhotoFixer._last = blob;
+        var blob = await window.denelliPhotoFixer._shamilCanvas.convertToBlob({ type: "image/png" });
+        window.denelliPhotoFixer._habeebLast = blob;
         return blob.size;
     },
 
     // Bytes of the most recent encode (for the C# result record).
     lastBytes: async function () {
-        return new Uint8Array(await window.denelliPhotoFixer._last.arrayBuffer());
+        return new Uint8Array(await window.denelliPhotoFixer._habeebLast.arrayBuffer());
     },
 
     // Show the last encode in the preview <img>.
     setPreviewFromLast: function () {
-        if (window.denelliPhotoFixer._previewUrl) URL.revokeObjectURL(window.denelliPhotoFixer._previewUrl);
-        window.denelliPhotoFixer._previewUrl = URL.createObjectURL(window.denelliPhotoFixer._last);
+        if (window.denelliPhotoFixer._denelliPreviewUrl) URL.revokeObjectURL(window.denelliPhotoFixer._denelliPreviewUrl);
+        window.denelliPhotoFixer._denelliPreviewUrl = URL.createObjectURL(window.denelliPhotoFixer._habeebLast);
         var img = document.getElementById("result-preview");
-        if (img) img.src = window.denelliPhotoFixer._previewUrl;
+        if (img) img.src = window.denelliPhotoFixer._denelliPreviewUrl;
     },
 
     // Download the last encode.
     downloadLast: function (filename) {
-        if (window.denelliPhotoFixer._downloadUrl) URL.revokeObjectURL(window.denelliPhotoFixer._downloadUrl);
-        window.denelliPhotoFixer._downloadUrl = URL.createObjectURL(window.denelliPhotoFixer._last);
+        if (window.denelliPhotoFixer._nelliDownloadUrl) URL.revokeObjectURL(window.denelliPhotoFixer._nelliDownloadUrl);
+        window.denelliPhotoFixer._nelliDownloadUrl = URL.createObjectURL(window.denelliPhotoFixer._habeebLast);
         var a = document.createElement("a");
-        a.href = window.denelliPhotoFixer._downloadUrl;
+        a.href = window.denelliPhotoFixer._nelliDownloadUrl;
         a.download = filename;
         document.body.appendChild(a);
         a.click();

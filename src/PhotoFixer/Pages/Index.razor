@@ -184,7 +184,7 @@
         try
         {
             var req = new ProcessRequest(width, height, maxKb, mode, format);
-            result = await PhotoFixerEngine.ProcessAsync(sourceInfo!, req, new Services.BrowserCodec(JS));
+            result = await PhotoFixerEngine.ProcessAsync(sourceInfo!, req, new Services.BrowserCodecShamil(JS));
             if (result.Success)
                 previewPending = true;
             else

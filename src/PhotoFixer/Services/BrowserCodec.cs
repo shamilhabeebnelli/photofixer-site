@@ -4,7 +4,7 @@ using PhotoFixer.Core;
 namespace PhotoFixer.Services;
 
 /// <summary>ICodecSession over the browser's own codecs (see wwwroot/js/app.js).</summary>
-public sealed class BrowserCodec(IJSRuntime js) : ICodecSession
+public sealed class BrowserCodecShamil(IJSRuntime js) : ICodecSession
 {
     public async Task RenderAsync(Geometry g) =>
         await js.InvokeVoidAsync("denelliPhotoFixer.render", g.CropX, g.CropY, g.CropW, g.CropH, g.OutW, g.OutH);
