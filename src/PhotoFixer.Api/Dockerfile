@@ -1,7 +1,7 @@
 # Build stage
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY src/ .
+COPY src/ src/
 RUN dotnet restore src/PhotoFixer.Api/PhotoFixer.Api.csproj
 RUN dotnet publish src/PhotoFixer.Api/PhotoFixer.Api.csproj -c Release -o /app --no-restore
 
