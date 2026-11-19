@@ -1,10 +1,8 @@
 # Build stage
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY src/PhotoFixer.Core/PhotoFixer.Core.csproj src/PhotoFixer.Core/
-COPY src/PhotoFixer.Api/PhotoFixer.Api.csproj src/PhotoFixer.Api/
-RUN dotnet restore src/PhotoFixer.Api/PhotoFixer.Api.csproj
 COPY src/ .
+RUN dotnet restore src/PhotoFixer.Api/PhotoFixer.Api.csproj
 RUN dotnet publish src/PhotoFixer.Api/PhotoFixer.Api.csproj -c Release -o /app --no-restore
 
 # Runtime stage
