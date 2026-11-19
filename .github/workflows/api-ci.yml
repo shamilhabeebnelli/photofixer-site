@@ -1,8 +1,8 @@
 name: api-ci
 
-# Verifies the PhotoFixer API branches: build, engine test suite, and the
-# Dockerfile. CI for this repository's own software - no deployment, no
-# endpoint is created by this workflow.
+# Verifies the PhotoFixer API branches: build, engine test suite, container
+# image build AND a runtime smoke test. CI for this repository's own
+# software - no deployment, no endpoint is created by this workflow.
 on:
   push:
     branches: [photofixer-api-selfhost, photofixer-api-hosted]
@@ -26,3 +26,41 @@ jobs:
 
       - name: Build container image (build verification only, never pushed)
         run: docker build -f src/PhotoFixer.Api/Dockerfile -t photofixer-api-ci .
+
+      - name: Container runtime smoke test
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import struct, zlib
+          def chunk(t, d):
+              c = t + d
+              return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c))
+          ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+          png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+                 + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00")) + chunk(b"IEND", b""))
+          open("/tmp/smoke.png", "wb").write(png)
+          PY
+          # CI-only dummy key (not a secret): proves the gate end to end.
+          KEY="ci-smoke-dummy-$RANDOM$RANDOM"
+          HASH=$(printf '%s' "$KEY" | sha256sum | cut -d' ' -f1 | tr 'a-f' 'A-F')
+          docker run -d --name api -p 8080:8080 \
+            -e PhotoFixer__RequireApiKey=true \
+            -e PhotoFixer__DailyQuota=200 \
+            -e "PhotoFixer__Keys__0=ci-smoke:$HASH" \
+            photofixer-api-ci
+          code=""
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/healthz || true)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          [ "$code" = "200" ]
+          unauth=$(curl -s -o /dev/null -w '%{http_code}' -F file=@/tmp/smoke.png http://localhost:8080/v1/process)
+          [ "$unauth" = "401" ]
+          got=$(curl -s -o /tmp/out.img -w '%{http_code}' -H "X-Api-Key: $KEY" -F file=@/tmp/smoke.png -F maxKb=50 http://localhost:8080/v1/process)
+          [ "$got" = "200" ]
+          sig=$(xxd -p -l 2 /tmp/out.img)
+          case "$sig" in 8950|ffd8|4749|5249|424d) ;; *) echo "unexpected output signature: $sig"; exit 1;; esac
+          docker logs api 2>&1 | tail -5
+          if docker logs api 2>&1 | grep -q "$KEY"; then echo "API key leaked into container logs"; exit 1; fi
+          docker stop api
